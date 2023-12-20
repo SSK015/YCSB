@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
+import java.io.FileWriter;
 
 /**
  * YCSB binding for <a href="http://redis.io/">Redis</a>.
@@ -60,11 +61,16 @@ public class RedisClient extends DB {
   public static final String PORT_PROPERTY = "redis.port";
   public static final String PASSWORD_PROPERTY = "redis.password";
   public static final String CLUSTER_PROPERTY = "redis.cluster";
-  public static final String TIMEOUT_PROPERTY = "redis.timeout";
 
   public static final String INDEX_KEY = "_indices";
+  private FileWriter fileWriter;
 
   public void init() throws DBException {
+    try{
+      fileWriter = new FileWriter("./operationSequence.txt");
+    } catch (IOException e){
+      e.printStackTrace();
+    }
     Properties props = getProperties();
     int port;
 
@@ -82,12 +88,7 @@ public class RedisClient extends DB {
       jedisClusterNodes.add(new HostAndPort(host, port));
       jedis = new JedisCluster(jedisClusterNodes);
     } else {
-      String redisTimeout = props.getProperty(TIMEOUT_PROPERTY);
-      if (redisTimeout != null){
-        jedis = new Jedis(host, port, Integer.parseInt(redisTimeout));
-      } else {
-        jedis = new Jedis(host, port);
-      }
+      jedis = new Jedis(host, port, 600000);
       ((Jedis) jedis).connect();
     }
 
@@ -102,6 +103,11 @@ public class RedisClient extends DB {
       ((Closeable) jedis).close();
     } catch (IOException e) {
       throw new DBException("Closing connection failed.");
+    }
+    try{
+      fileWriter.close();
+    } catch (IOException e){
+      e.printStackTrace();
     }
   }
 
@@ -120,6 +126,18 @@ public class RedisClient extends DB {
   @Override
   public Status read(String table, String key, Set<String> fields,
       Map<String, ByteIterator> result) {
+    try{
+      fileWriter.write("R " + key);
+      if(fields != null){
+        for(String s : fields){
+          fileWriter.write(" " + s);
+        }
+      }
+      fileWriter.write("\n");
+    } catch (IOException e){
+      e.printStackTrace();
+    }
+
     if (fields == null) {
       StringByteIterator.putAllAsByteIterators(result, jedis.hgetAll(key));
     } else {
@@ -142,6 +160,20 @@ public class RedisClient extends DB {
   @Override
   public Status insert(String table, String key,
       Map<String, ByteIterator> values) {
+    try{
+      fileWriter.write("I " + key);
+      values.forEach((k, v)->{
+          try{
+            fileWriter.write(" " + k + " " + v);
+          } catch (IOException e){
+            e.printStackTrace();
+          }
+        });
+      fileWriter.write("\n");
+    } catch (IOException e){
+      e.printStackTrace();
+    }
+
     if (jedis.hmset(key, StringByteIterator.getStringMap(values))
         .equals("OK")) {
       jedis.zadd(INDEX_KEY, hash(key), key);
@@ -159,6 +191,20 @@ public class RedisClient extends DB {
   @Override
   public Status update(String table, String key,
       Map<String, ByteIterator> values) {
+    try{
+      fileWriter.write("U " + key);
+      values.forEach((k, v)->{
+          try{
+            fileWriter.write(" " + k + " " + v);
+          } catch (IOException e){
+            e.printStackTrace();
+          }
+        });
+      fileWriter.write("\n");
+    } catch (IOException e){
+      e.printStackTrace();
+    }
+
     return jedis.hmset(key, StringByteIterator.getStringMap(values))
         .equals("OK") ? Status.OK : Status.ERROR;
   }
